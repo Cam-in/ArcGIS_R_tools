@@ -1,0 +1,26 @@
+###############################################
+## Data conversion from  XML to shapefile polygon
+###############################################
+### Case of study Kerguelen Island 
+
+# Load required package
+library(sf)
+
+# WFS URL with filter for Kerguélen EEZ
+url <- "http://geo.vliz.be/geoserver/wfs?request=getfeature&service=wfs&version=1.1.0&typename=MarineRegions:eez&filter=%3CFilter%3E%3CPropertyIsEqualTo%3E%3CPropertyName%3Emrgid_eez%3C/PropertyName%3E%3CLiteral%3E8387%3C/Literal%3E%3C/PropertyIsEqualTo%3E%3C/Filter%3E"
+
+# Read GML directly from the URL
+eez_polygon <- st_read(url)
+
+# Check geometry type
+print(st_geometry_type(eez_polygon))  # Should be "MULTIPOLYGON" or "POLYGON"
+
+# Plot to check
+plot(st_geometry(eez_polygon))
+
+# Save as shapefile (polygon)
+st_write(eez_polygon, "Kerguelen_EEZ_polygon.shp", delete_layer = TRUE)
+
+# Optional: convert to line and save
+eez_line <- st_cast(eez_polygon, "MULTILINESTRING")
+st_write(eez_line, "Kerguelen_EEZ_line.shp", delete_layer = TRUE)
