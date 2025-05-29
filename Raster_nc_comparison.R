@@ -1,3 +1,7 @@
+####
+## Original script provided by Pablo Guerrero (BASE, UDEC, IEB)
+###
+
 # Cargar paquetes
 library(terra)
 library(ggplot2)
