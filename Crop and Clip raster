@@ -82,3 +82,82 @@ if (answ_1 == "yes") {
                         ncol = 2, byrow = TRUE)
   shape_to_clip <- st_sfc(st_polygon(list(bbox_matrix)), crs = 4326)
 }
+
+
+##############################################################################################
+### Step 3: Load first raster, align shape, crop, mask, and reproject for testing
+##############################################################################################
+
+r1 <- terra::rast(tif_liste[1])
+shape_sf <- shape_to_clip
+plot(shape_sf)
+
+# Reproject shape to match raster
+if (st_crs(shape_sf) != crs(r1)) {
+  shape_sf <- st_transform(shape_sf, crs = crs(r1))
+}
+shape_vect <- vect(shape_sf)
+
+# Crop and mask
+r1_crop <- crop(r1, shape_vect, snap = "out")
+r1_mask <- mask(r1_crop, shape_vect)
+
+# Plot preview before reprojection
+plot(r1_mask, main = "Clipped and masked raster")
+plot(shape_vect, add = TRUE)
+
+# Reproject to EPSG:4326 (WGS84), using bilinear for continuous data
+newproj <- "EPSG:4326"
+r1_reproj <- terra::project(r1_mask, newproj, method = "bilinear")
+
+plot(r1_reproj, main = "Reprojected raster (EPSG:4326)")
+
+##############################################################################################
+### Step 4: Create a template raster from the masked extent for resampling
+##############################################################################################
+# (!!) Avoid this step if you do not need resampling the raster
+
+template_raster <- rast(ext = ext(r1_reproj), crs = newproj, res = res(r1_reproj))
+template_raster <- resample(template_raster, r1_reproj, method = "bilinear")
+values(template_raster) <- NA
+
+plot(template_raster, main = "Template Raster")
+plot(shape_vect, add = TRUE)
+
+# Save template if desired
+terra::writeRaster(template_raster, choose.files(multi = FALSE), filetype = "GTiff", overwrite = TRUE)
+
+##############################################################################################
+### Step 5: Batch clip and resample all rasters using the template
+##############################################################################################
+
+{
+  dlgMessage("Now clipping and resampling all rasters using the selected shape or bounding box.")$res
+  
+  env.raster <- tif_liste  # already listed
+  
+  shape <- terra::project(shape_vect, newproj)
+  res_rast <- template_raster
+  proj <- crs(res_rast)
+  
+  for (i in seq_along(env.raster)) {
+    message(sprintf("Processing %d of %d: %s", i, length(env.raster), basename(env.raster[i])))
+    r <- rast(env.raster[i])
+    
+    # Reproject if needed
+    if (crs(r) != newproj) {
+      r <- project(r, newproj, method = "bilinear")
+    }
+    
+    r <- resample(r, res_rast, method = "bilinear")
+    r <- mask(r, shape)
+    plot(r)
+    
+    # Save result
+    out_name <- paste0(tools::file_path_sans_ext(basename(env.raster[i])), "_clipped.tif")
+    writeRaster(r, filename = file.path(directory_save_edited_tiffs, out_name), 
+                filetype = "GTiff", overwrite = TRUE)
+  }
+  
+ }
+
