@@ -1,0 +1,84 @@
+################################################################################
+###     Crop and Clip data
+###     
+###     R version 4.4.1 (2024-06-14 ucrt)
+###     original Script version 14.07.2025
+################################################################################
+
+##############################################################################################
+### Step 1: Load required packages and initialize
+##############################################################################################
+
+library(terra)
+library(sf)
+library(svDialogs)
+library(here)
+library(tools)
+
+# Select input directory for original raster data
+if (exists("directory_save_original_data")) rm(directory_save_original_data)
+while (!exists("directory_save_original_data")) {
+  svDialogs::dlgMessage("Choose the directory with the input environmental raster data (tifs)")$res
+  setwd(svDialogs::dlgDir(default = getwd(), title = "Select directory with raster .tif files")$res)
+  directory_save_original_data <- getwd()
+}
+
+# Select output directory where edited raster data will be saved
+if (exists("directory_save_edited_tiffs")) rm(directory_save_edited_tiffs)
+while (!exists("directory_save_edited_tiffs")) {
+  svDialogs::dlgMessage("Choose the parent directory to store the edited data.\nA subdirectory will be created automatically")$res
+  mainDir <- choose.dir(default = getwd(), caption = "Select parent directory")
+  subDir <- "clipped_rasters"
+  output_path <- file.path(mainDir, subDir)
+  if (!dir.exists(output_path)) dir.create(output_path)
+  directory_save_edited_tiffs <- output_path
+  rm(mainDir, subDir)
+}
+
+# List .tif(f) files in the selected folder
+setwd(directory_save_original_data)
+tif_liste <- list.files(pattern = "\\.tif(f)?$", full.names = TRUE)
+
+##############################################################################################
+### Step 2: Ask user to clip with shapefile or bounding box
+##############################################################################################
+
+if (exists("shape_to_clip")) rm(shape_to_clip)
+answ_1 <- svDialogs::dlg_message("Do you want to clip the raster files using a shapefile?", "yesno")$res
+
+if (answ_1 == "yes") {
+  file_selected <- FALSE
+  repeat {
+    response <- svDialogs::dlg_message("Do you want to load a shapefile now?", "yesno")$res
+    if (response == "yes") {
+      shape_path <- try(choose.files(default = here(), multi = FALSE), silent = TRUE)
+      if (!inherits(shape_path, "try-error") && shape_path != "") {
+        shape_to_clip <- sf::st_read(shape_path)
+        file_selected <- TRUE
+        break
+      }
+    }
+    dlg_message("No shapefile selected. Using default bounding box for clipping.")$res
+    break
+  }
+  
+  if (!file_selected) {
+    # Create bounding box polygon (lat -90 to -30, full longitude)
+    bbox_matrix <- matrix(c(-180, -90,
+                            -180, -30,
+                            180, -30,
+                            180, -90,
+                            -180, -90), 
+                          ncol = 2, byrow = TRUE)
+    shape_to_clip <- st_sfc(st_polygon(list(bbox_matrix)), crs = 4326)
+  }
+} else {
+  # Use bounding box by default
+  bbox_matrix <- matrix(c(-180, -90,
+                          -180, -30,
+                          180, -30,
+                          180, -90,
+                          -180, -90), 
+                        ncol = 2, byrow = TRUE)
+  shape_to_clip <- st_sfc(st_polygon(list(bbox_matrix)), crs = 4326)
+}
